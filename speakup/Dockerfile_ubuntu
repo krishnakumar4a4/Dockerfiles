@@ -1,0 +1,66 @@
+FROM ubuntu:16.04
+
+# Set the locale
+#RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+RUN apt-get update -y && apt-get upgrade -y
+RUN apt install -y wget
+RUN apt install -y git
+
+WORKDIR /app
+#ADD speak_up speak_up
+RUN git clone -b buildingSite --single-branch https://github.com/krishnakumar4a4/speak_up.git
+#ADD speakup_stream_player speakup_stream_player
+RUN git clone https://github.com/krishnakumar4a4/speakup_stream_player.git
+
+RUN wget https://s3.amazonaws.com/rebar3/rebar3 && chmod +x rebar3
+RUN cp rebar3 /usr/bin/
+
+#Installing erlang
+RUN wget https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb && dpkg -i erlang-solutions_1.0_all.deb
+RUN apt-get update
+RUN apt-get install -y esl-erlang
+
+#Installing elixir
+RUN apt-get install -y elixir
+
+#Add Elixir path
+
+#Install phoenix
+RUN mix local.hex
+RUN mix archive.install https://github.com/phoenixframework/archives/raw/master/phoenix_new.ez
+
+#Install node
+WORKDIR /app
+RUN wget https://nodejs.org/dist/v9.9.0/node-v9.9.0-linux-x64.tar.gz
+#RUN apt-get install -y xz
+#RUN xz -d node-v9.9.0-linux-x64.tar.xz
+RUN tar -xvf node-v9.9.0-linux-x64.tar.gz
+RUN cp -r node-v9.9.0-linux-x64/bin/* /usr/bin/
+
+RUN apt-get install -y sqlite3 libsqlite3-dev
+
+#Compiling speakup
+WORKDIR /app/speak_up/
+RUN mix local.hex --force
+RUN mix local.rebar --force
+RUN mix deps.get
+RUN apt-get install -y gcc make
+RUN mix deps.compile
+
+EXPOSE 4443
+EXPOSE 8443
+
+WORKDIR /app/speakup_stream_player/pcm-stream-playback/
+RUN apt-get install -y curl
+RUN curl -sL https://deb.nodesource.com/setup_9.x | bash -
+RUN apt-get install -y nodejs
+RUN apt-get install -y g++
+RUN apt-get install -y libasound2-dev
+RUN npm install
+
+WORKDIR /app/speak_up/
+CMD iex --name phoenix_speak_up@127.0.0.1 --erl "-config config/sys.config" -S mix phx.server
